@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import rospy
+import copy
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
 
@@ -7,29 +8,36 @@ from geometry_msgs.msg import Twist
 WIDTH = 640
 HEIGHT = 480
 
-BLUE = 0
+KINECT_RED = 2
+KINECT_GREEN = 1
+KINECT_BLUE = 0
+
+RED = 0
 GREEN = 1
-RED = 2
+BLUE = 2
+
+PIXEL_LENGTH = 3
 
 count = 0
 
 x = 0
 y = 0
 
-color = [0x1D, 0x98, 0x1E]
-tolerance = 0x20
-
-
 found = False
+
+def in_color_range(pixel, color, tolerance):
+    print color
+    print pixel
+    return (color[RED] - tolerance <= pixel[RED] <= color[RED] + tolerance) and \
+           (color[GREEN] - tolerance <= pixel[GREEN] <= color[GREEN] + tolerance) and \
+           (color[BLUE] - tolerance <= pixel[BLUE] <= color[BLUE] + tolerance)
+
 def image_callback(data):
     global found 
     global count
 
-    red = ord(data.data[WIDTH * y + x + RED])
-    green = ord(data.data[WIDTH * y + x + GREEN])
-    blue = ord(data.data[WIDTH * y + x + BLUE])
-
-    # # Averaging code
+    # # Averaging code for color calibration. May replace with HSL values in
+    # # the future.
     # if 0 == count:
     #     average_r = red
     #     average_g = green
@@ -44,13 +52,19 @@ def image_callback(data):
     #     average_b -= average_b / count
     #     average_b += blue / count
 
-    count += 1
+    color = [0x98, 0x1D, 0x1E]
+    found = in_color_range(
+        [ord(data.data[KINECT_RED]),
+         ord(data.data[KINECT_GREEN]),
+         ord(data.data[KINECT_BLUE])],
+        color,
+        0x20
+    )
+    image_map = [0] * (len(data.data) / PIXEL_LENGTH)
+    print data.encoding
 
-    found = (color[RED] - tolerance <= red <= color[RED] + tolerance) and \
-            (color[GREEN] - tolerance <= green <= color[GREEN] + tolerance) and \
-            (color[BLUE] - tolerance <= blue <= color[BLUE] + tolerance)
-
-    print found, hex(red), hex(green), hex(blue)
+    for i in range(0, len(image_map), PIXEL_LENGTH):
+        None
 
 
 def move():
@@ -59,14 +73,14 @@ def move():
     velocity_publisher = rospy.Publisher('/cmd_vel_mux/input/navi', Twist, queue_size=10)
 
     # Subscribe to camera sensor data.
-    image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, image_callback)
+    image_sub = rospy.Subscriber("/camera/rgb/image_color", Image, image_callback)
 
     rate = rospy.Rate(10)
 
     while not rospy.is_shutdown():
         vel_msg = Twist()
         
-        speed = 0.05
+        speed = 0.1
         vel_msg.linear.x = 0.0
         vel_msg.angular.z = 0
         
@@ -75,6 +89,8 @@ def move():
 
         velocity_publisher.publish(vel_msg)
 
+        if found:
+            exit()
         rate.sleep()
 
 if __name__ == '__main__':
