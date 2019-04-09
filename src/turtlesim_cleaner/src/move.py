@@ -3,6 +3,12 @@ import rospy
 import copy
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
+import numpy as np
+
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+
+import time
 
 
 WIDTH = 640
@@ -18,54 +24,50 @@ BLUE = 2
 
 PIXEL_LENGTH = 3
 
-count = 0
+update_rate = 1
+frame_count = 0
 
-x = 0
-y = 0
+color = [0x98, 0x1D, 0x1E]
+tolerance = 0x20
+lower_red = np.array([
+    color[RED] - tolerance,
+    color[GREEN] - tolerance,
+    color[BLUE] - tolerance
+])
+upper_red = np.array([
+    color[RED] + tolerance,
+    color[GREEN] + tolerance,
+    color[BLUE] + tolerance
+])
 
-found = False
+mask = None
+res = None
 
-def in_color_range(pixel, color, tolerance):
-    print color
-    print pixel
-    return (color[RED] - tolerance <= pixel[RED] <= color[RED] + tolerance) and \
-           (color[GREEN] - tolerance <= pixel[GREEN] <= color[GREEN] + tolerance) and \
-           (color[BLUE] - tolerance <= pixel[BLUE] <= color[BLUE] + tolerance)
+bridge = CvBridge()
 
-def image_callback(data):
-    global found 
-    global count
+x_center = y_center = None
 
-    # # Averaging code for color calibration. May replace with HSL values in
-    # # the future.
-    # if 0 == count:
-    #     average_r = red
-    #     average_g = green
-    #     average_b = blue
-    # else:
-    #     average_r -= average_r / count
-    #     average_r += red / count
+def image_callback(msg):
+    global points
+    global mask, res
 
-    #     average_g -= average_g / count
-    #     average_g += green / count
+    try:
+       # Convert your ROS Image message to OpenCV2
+       cv2_img = bridge.imgmsg_to_cv2(msg, "bgr8")
+    except CvBridgeError, e:
+       print(e)
+    rgb = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
+    
+    mask = cv2.inRange(rgb, lower_red, upper_red)
 
-    #     average_b -= average_b / count
-    #     average_b += blue / count
+    # From https://stackoverflow.com/q/38933566
+    # Computes the centroid of the blob.
+    count = (255 == mask).sum()
+    y_center, x_center = np.argwhere(255 == mask).sum(0) / count
 
-    color = [0x98, 0x1D, 0x1E]
-    found = in_color_range(
-        [ord(data.data[KINECT_RED]),
-         ord(data.data[KINECT_GREEN]),
-         ord(data.data[KINECT_BLUE])],
-        color,
-        0x20
-    )
-    image_map = [0] * (len(data.data) / PIXEL_LENGTH)
-    print data.encoding
-
-    for i in range(0, len(image_map), PIXEL_LENGTH):
-        None
-
+    # # This code displays the blob on the window.
+    # cv2.imshow('mask', mask)
+    # cv2.waitKey(0x10);
 
 def move():
     # Starts a new node
@@ -75,7 +77,7 @@ def move():
     # Subscribe to camera sensor data.
     image_sub = rospy.Subscriber("/camera/rgb/image_color", Image, image_callback)
 
-    rate = rospy.Rate(10)
+    rate = rospy.Rate(update_rate)
 
     while not rospy.is_shutdown():
         vel_msg = Twist()
@@ -84,13 +86,11 @@ def move():
         vel_msg.linear.x = 0.0
         vel_msg.angular.z = 0
         
-        if found:
-            vel_msg.linear.x = speed
+        # if 200 <= count < 1000:
+        #     vel_msg.linear.x = speed
 
         velocity_publisher.publish(vel_msg)
 
-        if found:
-            exit()
         rate.sleep()
 
 if __name__ == '__main__':
