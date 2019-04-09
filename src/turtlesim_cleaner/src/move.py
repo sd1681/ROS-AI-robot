@@ -24,11 +24,11 @@ BLUE = 2
 
 PIXEL_LENGTH = 3
 
-update_rate = 1
+update_rate = 20
 frame_count = 0
 
 color = [0x98, 0x1D, 0x1E]
-tolerance = 0x20
+tolerance = 0x30
 lower_red = np.array([
     color[RED] - tolerance,
     color[GREEN] - tolerance,
@@ -41,15 +41,15 @@ upper_red = np.array([
 ])
 
 mask = None
-res = None
+lower_area = 1000
+upper_area = 10000
 
 bridge = CvBridge()
 
-x_center = y_center = None
+x_center = y_center = count = None
 
 def image_callback(msg):
-    global points
-    global mask, res
+    global mask, count, x_center, y_center
 
     try:
        # Convert your ROS Image message to OpenCV2
@@ -65,9 +65,9 @@ def image_callback(msg):
     count = (255 == mask).sum()
     y_center, x_center = np.argwhere(255 == mask).sum(0) / count
 
-    # # This code displays the blob on the window.
-    # cv2.imshow('mask', mask)
-    # cv2.waitKey(0x10);
+    # This code displays the blob on the window.
+    cv2.imshow('mask', mask)
+    cv2.waitKey(0x10);
 
 def move():
     # Starts a new node
@@ -78,16 +78,26 @@ def move():
     image_sub = rospy.Subscriber("/camera/rgb/image_color", Image, image_callback)
 
     rate = rospy.Rate(update_rate)
+    center_tolerance = 100
 
     while not rospy.is_shutdown():
         vel_msg = Twist()
         
-        speed = 0.1
+        center = 320
+        linear_speed = 0.1
+        angular_speed = 0.5
         vel_msg.linear.x = 0.0
         vel_msg.angular.z = 0
         
-        # if 200 <= count < 1000:
-        #     vel_msg.linear.x = speed
+        if x_center and y_center and lower_area < count < upper_area:
+            vel_msg.linear.x = linear_speed
+            if center - center_tolerance > x_center:
+                vel_msg.angular.z = angular_speed 
+            elif center + center_tolerance < x_center:
+                vel_msg.angular.z = -angular_speed 
+        else:
+            vel_msg.linear.x = 0.0
+            vel_msg.angular.z = 0
 
         velocity_publisher.publish(vel_msg)
 
