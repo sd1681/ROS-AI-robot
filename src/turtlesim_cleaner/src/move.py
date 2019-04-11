@@ -8,7 +8,7 @@ import numpy as np
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 
-import time
+import math
 
 # Finite state machine states.
 STATE_STOP = 0
@@ -107,6 +107,7 @@ def move():
     image_sub = rospy.Subscriber("/camera/rgb/image_color", Image, image_callback)
 
     rate = rospy.Rate(update_rate)
+    tick = 0
 
     while not rospy.is_shutdown():
         vel_msg = Twist()
@@ -117,12 +118,14 @@ def move():
         if STATE_STOP == cur_state:
             if target_in_view():
                 cur_state = STATE_APPROACH_TARGET
+            elif no_target():
+                cur_state = STATE_FIND_TARGET
 
         elif STATE_APPROACH_TARGET == cur_state:
             if at_target():
                 cur_state = STATE_STOP
             elif no_target():
-                cur_state = STATE_STOP
+                cur_state = STATE_FIND_TARGET
             else:
                 vel_msg.linear.x = linear_speed
 
@@ -130,6 +133,21 @@ def move():
                     vel_msg.angular.z = angular_speed 
                 elif center + center_tolerance < x_center:
                     vel_msg.angular.z = -angular_speed 
+        elif STATE_FIND_TARGET == cur_state:
+            if at_target():
+                cur_state = STATE_STOP
+                tick = 0
+            elif target_in_view():
+                cur_state = STATE_APPROACH_TARGET
+                tick = 0
+
+            multiplier = 20
+            if tick % (update_rate * multiplier) < update_rate * multiplier / 2:
+                vel_msg.angular.z = angular_speed
+            elif tick % (update_rate * multiplier) >= update_rate * multiplier / 2:
+                vel_msg.angular.z = -angular_speed
+
+            tick += 1
 
         velocity_publisher.publish(vel_msg)
 
