@@ -27,12 +27,12 @@ update_rate = 20
 
 # Number of pixels left and right of the center of the sensor image that
 # indicates the robot is bearing down on target.
-center_tolerance = 100
+center_tolerance = 50
 
 # Color of the target. The camera is noisy, so I averaged this over time by
 # holding the object so pixel (0, 0) had the value of the color.
 color = [0x98, 0x1D, 0x1E]
-tolerance = 0x20
+tolerance = 0x30
 
 # Lower bound of the color.
 lower_red = np.array([
@@ -49,7 +49,7 @@ upper_red = np.array([
 ])
 
 # Lower bound on pixel count that indicates the target is in view.
-lower_area = 1000
+lower_area = 300
 # Upper bound on pixel count that indicates the robot is at target.
 upper_area = 10000
 
